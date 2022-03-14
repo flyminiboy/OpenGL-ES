@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <android.opengl.GLSurfaceView
+    <com.gpf.learnopengles.MyGLSurfaceView
         android:id="@+id/main_gl_surface"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

@@ -48,13 +48,12 @@ class MyGLRender(val context: Context) : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        surfaceTexture?.let { surfaceTexture ->
-            // 获取新的纹理数据
-            surfaceTexture.updateTexImage()
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        //使用程序片段
+        GLES30.glUseProgram(program)
 
+        surfaceTexture?.updateTexImage()
 
-
-        }
     }
 
 }

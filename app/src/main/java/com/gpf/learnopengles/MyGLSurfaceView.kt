@@ -8,7 +8,7 @@ class MyGLSurfaceView(context: Context, attrs: AttributeSet) : GLSurfaceView(
     context, attrs
 ) {
 
-    private lateinit var render:MyGLRender
+    private val render:MyGLRender
 
     init {
         setEGLContextClientVersion(3)
