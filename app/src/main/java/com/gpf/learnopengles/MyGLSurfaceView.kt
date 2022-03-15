@@ -16,6 +16,4 @@ class MyGLSurfaceView(context: Context, attrs: AttributeSet?=null) : GLSurfaceVi
         renderMode = RENDERMODE_WHEN_DIRTY
     }
 
-
-
 }

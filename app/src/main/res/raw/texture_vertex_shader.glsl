@@ -1,15 +1,12 @@
 // 声明着色器使用OpenGL ES着色语言3.0版本
 #version 300 es
 layout (location = 0) in vec4 vPosition;
-layout (location = 1) in vec4 aTextureCoord;
-//纹理矩阵
-uniform mat4 uTextureMatrix;
+layout (location = 1) in vec2 aTextureCoord;
+
 out vec2 yuvTexCoords;
 void main() {
     gl_Position  = vPosition;
-    gl_PointSize = 10.0;
-    //只保留x和y分量
-    yuvTexCoords = (uTextureMatrix * aTextureCoord).xy;
+    yuvTexCoords = aTextureCoord;
 }
 
 /**

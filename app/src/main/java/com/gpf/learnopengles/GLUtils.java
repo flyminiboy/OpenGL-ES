@@ -4,6 +4,7 @@ import static android.opengl.GLES30.GL_COMPILE_STATUS;
 
 import android.content.Context;
 import android.opengl.GLES30;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -69,8 +70,9 @@ public class GLUtils {
             //检查编译状态
             int[] compiled = new int[1];
             GLES30.glGetShaderiv(res, GL_COMPILE_STATUS, compiled, 0);
-            res = compiled[0];
-            if (res == GLES30.GL_FALSE) {
+            int compiledRes = compiled[0];
+            if (compiledRes == GLES30.GL_FALSE) {
+                Log.e(AnyHelperKt.TAG, GLES30.glGetShaderInfoLog(res));
                 GLES30.glDeleteShader(res);
                 break; // 编译失败
             }
