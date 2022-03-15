@@ -6,8 +6,8 @@ import android.content.Context
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.opengl.GLES11Ext
-import android.opengl.GLES20.*
 import android.opengl.GLES30
+import android.opengl.GLES30.*
 import android.opengl.GLSurfaceView
 import android.os.Handler
 import android.os.HandlerThread
@@ -35,34 +35,69 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
 
     val permissions = arrayListOf(Manifest.permission.CAMERA)
 
-    // opengl 坐标体系
-    val vertext = floatArrayOf(
-        -1f, 1f, 0.0f, // 左上
-        -1f, -1f, 0.0f, // 左下
-        1f, -1f, 0.0f, // 右下
-        1f, 1f, 0.0f // 右上
+    private val transformMatrix = FloatArray(16)
+
+    /**
+     * 顶点坐标
+     * (x,y,z)
+     */
+    private val POSITION_VERTEX = floatArrayOf(
+        0f, 0f, 0f,  //顶点坐标V0
+        1f, 1f, 0f,  //顶点坐标V1
+        -1f, 1f, 0f,  //顶点坐标V2
+        -1f, -1f, 0f,  //顶点坐标V3
+        1f, -1f, 0f //顶点坐标V4
     )
 
-    // 纹理坐标
-    val textureCoord = floatArrayOf(
-        0.0f, 1.0f,
-        1.0f, 1.0f,
-        1.0f, 0.0f,
-        0.0f, 0.0f
+    /**
+     * 纹理坐标
+     * (s,t)
+     */
+    private val TEX_VERTEX = floatArrayOf(
+        0.5f, 0.5f,  //纹理坐标V0
+        1f, 1f,  //纹理坐标V1
+        0f, 1f,  //纹理坐标V2
+        0f, 0.0f,  //纹理坐标V3
+        1f, 0.0f //纹理坐标V4
     )
 
     private val vertexBuffer by lazy {
-        getFloatBuffer(vertext)
+        getFloatBuffer(POSITION_VERTEX)
     }
     private val textureCoordBuffer by lazy {
-        getFloatBuffer(textureCoord)
+        getFloatBuffer(TEX_VERTEX)
     }
+
+    var vertexLoc:Int?=null
+    var textureLoc:Int?=null
+    var oesTextureLoc:Int?=null
+    var uTextureMatrixLocation:Int?=null
 
     // 接收相机数据的纹理id
     val textureId = IntArray(1)
     private var surfaceTexture: SurfaceTexture?=null
 
     private var program:Int = 0
+
+    /**
+     * 索引
+     */
+    private val VERTEX_INDEX = shortArrayOf(
+        0, 1, 2,  //V0,V1,V2 三个顶点组成一个三角形
+        0, 2, 3,  //V0,V2,V3 三个顶点组成一个三角形
+        0, 3, 4,  //V0,V3,V4 三个顶点组成一个三角形
+        0, 4, 1 //V0,V4,V1 三个顶点组成一个三角形
+    )
+
+    private val mVertexIndexBuffer by lazy {
+        val buffer = ByteBuffer.allocateDirect(VERTEX_INDEX.size * 2)
+            .order(ByteOrder.nativeOrder())
+            .asShortBuffer()
+            .put(VERTEX_INDEX)
+
+        buffer.position(0)
+        buffer
+    }
 
     fun getFloatBuffer(array: FloatArray): FloatBuffer? {
         //将顶点数据拷贝映射到 native 内存中，以便opengl能够访问
@@ -78,14 +113,40 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
 
+        program = GLUtils.createAndLinkProgram(glSurfaceView.context, R.raw.texture_vertex_shader, R.raw.texture_oes_fragtment_shader)
+        // 判断是否创建成功
+
+        vertexLoc = glGetAttribLocation(program, "vPosition")
+        textureLoc = glGetAttribLocation(program, "aTextureCoord")
+        oesTextureLoc = glGetUniformLocation(program, "yuvTexSampler")
+        uTextureMatrixLocation = GLES30.glGetUniformLocation(program, "uTextureMatrix");
+
         // 创建纹理对象 ==> 得到只是一个纹理id
         GLES30.glGenTextures(textureId.size, textureId, 0)
+        //绑定外部纹理到纹理单元0
+        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId[0])
+
+        //设置纹理过滤参数
+        glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,GL_NEAREST.toFloat())
+        glTexParameterf(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR.toFloat())
+        glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE)
+
+        //解除纹理绑定
+        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
+
+        //设置清除渲染时的颜色
+        GLES30.glClearColor(1.0f, 1.0f, 1.0f, 0.0f)
 
         // 将纹理绑定到SurfaceTexture
+
         surfaceTexture = SurfaceTexture(textureId[0]).apply {
             setOnFrameAvailableListener {
-                logE("setOnFrameAvailableListener")
-                glSurfaceView.requestRender()
+                glSurfaceView.queueEvent {
+                    // 请求渲染器渲染一帧
+                    logE("渲染")
+                    glSurfaceView.requestRender()
+                }
             }
 
             mainHandler.post {
@@ -100,10 +161,6 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
             }
 
         }
-
-        program = GLUtils.createAndLinkProgram(glSurfaceView.context, R.raw.texture_vertex_shader, R.raw.texture_oes_fragtment_shader)
-        // 设置清除渲染时的颜色
-        GLES30.glClearColor(0f, 0f, 0f, 0f)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -112,59 +169,43 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
 
     override fun onDrawFrame(gl: GL10?) {
 
-        // 更新数据，其实也是消耗数据，将上一帧的数据处理或者抛弃掉，要不然SurfaceTexture是接收不到最新数据
-        // 就会将一帧预览数据推送给外部纹理上
-        surfaceTexture?.updateTexImage()
-
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        // 使用程序片段
+
+        //使用程序片段
         GLES30.glUseProgram(program)
 
+        //更新纹理图像
+        surfaceTexture?.let {
+            // 将纹理图像更新为图像流中的最新帧
+            logE("update texture")
+            it.updateTexImage()
+            it.getTransformMatrix(transformMatrix)
+        }
 
 
-        val vertexLoc = glGetAttribLocation(program, "a_Position")
-        val textureLoc = glGetAttribLocation(program, "a_texCoord")
-
-        glEnableVertexAttribArray(vertexLoc)
-        glEnableVertexAttribArray(textureLoc)
-
-        glVertexAttribPointer(
-            vertexLoc,
-            3,
-            GL_FLOAT,
-            false,
-            0,
-            vertexBuffer
-        )
-
-        glVertexAttribPointer(
-            textureLoc,
-            2,
-            GL_FLOAT,
-            false,
-            0,
-            textureCoordBuffer
-        )
-
-        // 激活纹理单元
+        //激活纹理单元0
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         //绑定外部纹理到纹理单元0
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId[0])
+        //将此纹理单元床位片段着色器的uTextureSampler外部纹理采样器
+        oesTextureLoc?.let {
+            GLES30.glUniform1i(it, 0)
+        }
 
-        //设置纹理过滤参数
-        glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,GL_NEAREST)
-        glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-        glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE)
+        //将纹理矩阵传给片段着色器
+        uTextureMatrixLocation?.let {
+            GLES30.glUniformMatrix4fv(it, 1, false, transformMatrix, 0)
+        }
 
-        //将此纹理单元传给片段着色器的uTextureSampler外部纹理采样器
-        val uTextureLoc = glGetUniformLocation(program, "s_texture")
-        glUniform1i(uTextureLoc, 0)
+        // 利用 layout 布局限定符
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 0, vertexBuffer)
+        GLES30.glEnableVertexAttribArray(1)
+        GLES30.glVertexAttribPointer(1, 2, GLES30.GL_FLOAT, false, 0, textureCoordBuffer)
 
-        glDrawArrays(GL_TRIANGLE_FAN, 0, vertext.size / 3)
+        // 绘制
+        GLES30.glDrawElements(GLES30.GL_TRIANGLES, VERTEX_INDEX.size, GLES30.GL_UNSIGNED_SHORT, mVertexIndexBuffer)
 
-        glDisableVertexAttribArray(vertexLoc)
-        glDisableVertexAttribArray(textureLoc)
     }
 
     @SuppressLint("MissingPermission")
@@ -175,7 +216,13 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
         cm.openCamera(cameraId, object : CameraDevice.StateCallback() {
             override fun onOpened(camera: CameraDevice) {
 
-                surfaceTexture!!.setDefaultBufferSize(1920, 1080)
+                val characteristics = cm.getCameraCharacteristics(cameraId)
+                val configs = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                configs?.getOutputSizes(SurfaceTexture::class.java)?.let {
+                    surfaceTexture!!.setDefaultBufferSize(it[0].width, it[0].height)
+                }
+
+
                 val surface = Surface(surfaceTexture)
                 val surfaces = arrayListOf(surface)
                 // 通过向相机设备提供 Surfaces 的目标输出集来创建新的相机捕获会话。

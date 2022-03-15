@@ -5,7 +5,7 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 
-class MyGLSurfaceView(context: Context, attrs: AttributeSet) : GLSurfaceView(
+class MyGLSurfaceView(context: Context, attrs: AttributeSet?=null) : GLSurfaceView(
     context, attrs
 ) {
 
