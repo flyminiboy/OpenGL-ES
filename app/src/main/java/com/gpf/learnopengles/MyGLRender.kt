@@ -35,14 +35,23 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
 
     val permissions = arrayListOf(Manifest.permission.CAMERA)
 
+
+    // TODO 关于这些坐标也不懂
+
+
+    // OpenGL 坐标系中每个顶点的 x，y，z 坐标都应该在 -1.0 到 1.0 之间
+    // 逆时针顺序定义
+
     /**
      * 顶点坐标
+     *
+     * 忽略z轴
      */
     private val POSITION_VERTEX = floatArrayOf(
-        -1.0f, 1.0f,
-        -1.0f,-1.0f,
-        1.0f, -1.0f,
-        1.0f,  1.0f,
+        -1.0f, 1.0f, // left top
+        -1.0f,-1.0f, // left bottom
+        1.0f, -1.0f, // right bottom
+        1.0f,  1.0f, // right top
     )
 
     /**
@@ -51,12 +60,35 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
      * 后置摄像头
      */
     private val TEX_VERTEX = floatArrayOf(
-        0.0f, 1.0f,
-        1.0f, 1.0f,
-        1.0f, 0.0f,
-        0.0f, 0.0f,
+        0.0f, 1.0f, //
+        1.0f, 1.0f, //
+        1.0f, 0.0f, //
+        0.0f, 0.0f, //
     )
 
+    // TODO 这个地方不懂
+
+    // GLenum mode 绘制三角形的模式
+    //  GL_TRIANGLES 以每三个顶点绘制一个三角形，第一个三角形使用顶点v0，v1，v2，第二个使用v3，v4，v5，以此类推。如果顶点的个数n不是3的倍数，那么最后的1个或者2个顶点会被忽略
+    //      绘制俩个三角需要6个点 0 1 2 3 4 5
+    //  GL_TRIANGLE_STRIP 构建当前三角形的顶点的连接顺序依赖于要和前面已经出现过的2个顶点组成三角形的当前顶点的序号的奇偶性（序号从0开始）：如果当前顶点是奇数，组成三角形的顶点排列顺序：T = [n-1 n-2 n]；如果当前顶点是偶数，组成三角形的顶点排列顺序：T = [n-2 n-1 n]
+    //      绘制俩个三角需要4个点 0 1 2 1 2 3
+    //  GL_TRIANGLE_FAN 以这种方式画出来的三角形也是连接在一起的，它们有一个共同的顶点，这个顶点称为它们的中心顶点。按顺序前三个点组成一个三角形。而后保留该组三角形的最后一个顶点我们暂且记为last，依次按照中心点、last和下一个点组成下一个三角形。并重复该过程。在OpenGL中，这个中心顶点就是所给定的第一个点
+    //      绘制俩个三角需要4个点 0 1 2 0 2 3 扇形结构
+
+    // glDrawArrays 顶点法
+
+    // first 表示从数组缓存中哪一位开始绘制
+    // count 顶点的数量
+
+    // glDrawElements 索引法
+    // 绘制的个数
+    // 顶点索引数据的类型 -
+    // 偏移量 - 一般是0
+
+    // 在指定三角形的绘制模式下的顶点坐标索引顺序
+    // 以0位中心顶点，第一个三角 0 1 2 最后一个last->2 ，按照中心顶点 last 下一个顶点组层下一个三角，一次类推
+    // 0 1 2 0 2 3
     private val VERTEX_ORDER = byteArrayOf(0, 1, 2, 3) // order to draw vertices
     private val mDrawListBuffer by lazy {
         val buffer = ByteBuffer.allocateDirect(VERTEX_ORDER.size).order(ByteOrder.nativeOrder())
@@ -64,6 +96,12 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
         buffer
     }
 
+    // 为什么要做数据转换
+    // 主要是因为
+    // Java的缓冲区数据存储结构为大端字节序(BigEdian)
+    // OpenGl的数据为小端字节序（LittleEdian）,
+    // 因为数据存储结构的差异，所以，在Android中使用OpenGl的时候必须要进行下转换
+    //
     private val vertexBuffer by lazy {
         getFloatBuffer(POSITION_VERTEX)
     }
@@ -85,6 +123,7 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
     fun getFloatBuffer(array: FloatArray): FloatBuffer? {
         //将顶点数据拷贝映射到 native 内存中，以便opengl能够访问
         val buffer: FloatBuffer = ByteBuffer
+                // size 为什么要乘以4 占几个字节就初始化ByteBuffer长度的时候*几 float 4个字节
             .allocateDirect(array.size * 4) //直接分配 native 内存，不会被gc
             .order(ByteOrder.nativeOrder()) //和本地平台保持一致的字节序（大/小头）
             .asFloatBuffer() //将底层字节映射到FloatBuffer实例，方便使用
@@ -172,6 +211,13 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
         // 利用 layout 布局限定符
         vertexLoc?.let {
             GLES30.glEnableVertexAttribArray(it)
+            // 定义顶点属性数组
+            // index 指定要修改的顶点着色器中顶点变量 索引
+            // size 指定每个顶点属性的组件数量 position 2 (x,y)/3 (x,y,z) 颜色 4 (r,g,b,a)
+            // type 指定数组中每个组件的数据类型
+            // normalized 指定当被访问时，固定点数据值是否应该被归一化（GL_TRUE）或者直接转换为固定点值（GL_FALSE）
+            // stride 指定连续顶点属性之间的偏移量,下一个元素位置在2个float之后，2 * sizeof(float) = 8
+            // ptr 顶点的缓冲数据
             GLES30.glVertexAttribPointer(it, 2, GLES30.GL_FLOAT, false, 8, vertexBuffer)
         }
         textureLoc?.let {
@@ -180,7 +226,9 @@ class MyGLRender(val glSurfaceView: GLSurfaceView) : GLSurfaceView.Renderer {
         }
 
         // 绘制
-        GLES30.glDrawElements(GLES30.GL_TRIANGLE_FAN, VERTEX_ORDER.size, GLES30.GL_UNSIGNED_BYTE, mDrawListBuffer);
+        //
+//        GLES30.glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
+        GLES30.glDrawElements(GLES30.GL_TRIANGLE_FAN, VERTEX_ORDER.size, GLES30.GL_UNSIGNED_BYTE, mDrawListBuffer)
 
     }
 
